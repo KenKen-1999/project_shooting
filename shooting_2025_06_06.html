@@ -45,6 +45,66 @@
             width: 100%;
             max-width: 480px; /* キャンバス幅に合わせる */
         }
+        .score-display {
+            margin-bottom: 8px;
+        }
+        .score-bar-container {
+            margin-top: 8px;
+        }
+        .score-bar-background {
+            width: 100%;
+            height: 12px;
+            background-color: #4a5568;
+            border-radius: 6px;
+            overflow: hidden;
+            margin-bottom: 4px;
+            border: 1px solid #2d3748;
+        }
+        .score-bar {
+            height: 100%;
+            border-radius: 6px;
+            width: 0%;
+            transition: width 0.3s ease, background 0.5s ease;
+        }
+        .score-bar.level-1 {
+            background: linear-gradient(90deg, #48bb78 0%, #68d391 50%, #9ae6b4 100%);
+            box-shadow: 0 0 8px rgba(72, 187, 120, 0.4);
+        }
+        .score-bar.level-2 {
+            background: linear-gradient(90deg, #4299e1 0%, #63b3ed 50%, #90cdf4 100%);
+            box-shadow: 0 0 8px rgba(66, 153, 225, 0.4);
+        }
+        .score-bar.level-3 {
+            background: linear-gradient(90deg, #ed8936 0%, #f6ad55 50%, #fbd38d 100%);
+            box-shadow: 0 0 8px rgba(237, 137, 54, 0.4);
+        }
+        .score-bar.level-4 {
+            background: linear-gradient(90deg, #e53e3e 0%, #fc8181 50%, #feb2b2 100%);
+            box-shadow: 0 0 8px rgba(229, 62, 62, 0.4);
+        }
+        .score-bar.level-5 {
+            background: linear-gradient(90deg, #9f7aea 0%, #b794f6 50%, #d6bcfa 100%);
+            box-shadow: 0 0 8px rgba(159, 122, 234, 0.4);
+        }
+        .score-bar.level-6 {
+            background: linear-gradient(90deg, #d53f8c 0%, #f687b3 50%, #fbb6ce 100%);
+            box-shadow: 0 0 8px rgba(213, 63, 140, 0.4);
+        }
+        .score-bar.level-high {
+            background: linear-gradient(90deg, #f6e05e 0%, #faf089 25%, #f093fb 50%, #c084fc 75%, #a78bfa 100%);
+            box-shadow: 0 0 12px rgba(246, 224, 94, 0.6);
+            animation: rainbow-glow 2s ease-in-out infinite alternate;
+        }
+        @keyframes rainbow-glow {
+            0% { box-shadow: 0 0 12px rgba(246, 224, 94, 0.6); }
+            33% { box-shadow: 0 0 12px rgba(240, 147, 251, 0.6); }
+            66% { box-shadow: 0 0 12px rgba(192, 132, 252, 0.6); }
+            100% { box-shadow: 0 0 12px rgba(167, 139, 250, 0.6); }
+        }
+        .score-bar-label {
+            font-size: 0.8rem;
+            color: #a0aec0;
+        }
         .controls button {
             background-color: #4299e1; /* 青色のボタン */
             color: white;
@@ -139,8 +199,16 @@
 <body>
     <div class="game-container">
         <div class="info">
-            <span>スコア: <span id="score">0</span></span> |
-            <span>レベル: <span id="level">1</span></span>
+            <div class="score-display">
+                <span>スコア: <span id="score">0</span></span> |
+                <span>レベル: <span id="level">1</span></span>
+            </div>
+            <div class="score-bar-container">
+                <div class="score-bar-background">
+                    <div class="score-bar level-1" id="scoreBar"></div>
+                </div>
+                <div class="score-bar-label">次のレベルまで: <span id="nextLevelScore">100</span></div>
+            </div>
         </div>
         <canvas id="gameCanvas"></canvas>
         <div class="controls">
@@ -149,7 +217,7 @@
             <button id="restartButton" style="display: none;">リスタート</button>
         </div>
         <div class="instructions text-xs text-gray-400 mt-1">
-            操作: ← → キーで移動, ↑/スペースキーで弾発射
+            操作: ← → キーで移動, ↑/スペースキーで弾発射, スペースキーでゲーム開始
         </div>
     </div>
 
@@ -184,6 +252,9 @@
         const touchLeftButton = document.getElementById('touchLeft');
         const touchRightButton = document.getElementById('touchRight');
         const touchFireButton = document.getElementById('touchFire');
+
+        const scoreBar = document.getElementById('scoreBar');
+        const nextLevelScore = document.getElementById('nextLevelScore');
 
         // --- Game Variables ---
         let canvasWidth = 480;
@@ -223,6 +294,7 @@
         let animationFrameId;
         let lastEnemySpawnTime = 0;
         let keys = {};
+        let isLevelUpMessage = false;
 
         // --- Assets (SVG) ---
         const playerImage = new Image();
@@ -236,6 +308,22 @@
         document.addEventListener('keydown', (e) => {
             keys[e.key] = true;
             if (gameRunning && !paused && (e.key === ' ' || e.key === 'ArrowUp')) e.preventDefault();
+            
+            // Enterキーでメッセージボタンをクリック
+            if (e.key === 'Enter' && messageBox.style.display === 'block') {
+                e.preventDefault();
+                handleMessageButtonClick();
+            }
+            
+            // スペースキーでゲーム開始（ゲーム未開始時）
+            if (e.key === ' ' && !gameRunning && messageBox.style.display !== 'block') {
+                e.preventDefault();
+                if (restartButton.style.display === 'inline-block') {
+                    restartGame();
+                } else {
+                    startGame();
+                }
+            }
         });
         document.addEventListener('keyup', (e) => { keys[e.key] = false; });
 
@@ -243,9 +331,18 @@
         pauseButton.addEventListener('click', togglePause);
         restartButton.addEventListener('click', restartGame);
 
-        messageButton.addEventListener('click', () => {
+        messageButton.addEventListener('click', handleMessageButtonClick);
+        
+        function handleMessageButtonClick() {
             messageBox.style.display = 'none';
-            if (!gameRunning) {
+            if (isLevelUpMessage) {
+                // レベルアップメッセージの場合はゲームを続行
+                isLevelUpMessage = false;
+                if (gameRunning) {
+                    paused = false;
+                    gameLoop(); // ゲームループを再開
+                }
+            } else if (!gameRunning) {
                 restartButton.style.display = 'inline-block';
                 startButton.style.display = 'none';
                 pauseButton.style.display = 'none';
@@ -253,18 +350,20 @@
             } else if (paused && messageButton.textContent === "再開") {
                 togglePause();
             }
-        });
+        }
         
         initTouchControls();
 
         // --- Message Box Function (シンプル版) ---
-        function showMessage(title, text, buttonText = "OK") {
+        function showMessage(title, text, buttonText = "OK", isLevelUp = false) {
             messageTitle.textContent = title;
             messageText.textContent = text;
             messageButton.textContent = buttonText;
             messageBox.style.display = 'block';
+            isLevelUpMessage = isLevelUp;
             if (gameRunning) {
                  if (!paused) paused = true;
+                 cancelAnimationFrame(animationFrameId);
             }
         }
 
@@ -323,9 +422,11 @@
             enemySpawnInterval = enemySpawnIntervalBase;
             scoreDisplay.textContent = score;
             levelDisplay.textContent = level;
+            updateScoreBar();
             gameRunning = false;
             paused = false;
             keys = {};
+            isLevelUpMessage = false;
         }
 
         function fireBullet() {
@@ -411,6 +512,28 @@
             }
         }
 
+        function updateScoreBarColor() {
+            // 既存のレベルクラスを削除
+            scoreBar.className = 'score-bar';
+            
+            // レベルに応じたクラスを追加
+            if (level >= 7) {
+                scoreBar.classList.add('level-high');
+            } else {
+                scoreBar.classList.add(`level-${level}`);
+            }
+        }
+
+        function updateScoreBar() {
+            const currentLevelScore = (level - 1) * 100;
+            const nextLevelScore = level * 100;
+            const progress = ((score - currentLevelScore) / (nextLevelScore - currentLevelScore)) * 100;
+            
+            scoreBar.style.width = Math.min(progress, 100) + '%';
+            document.getElementById('nextLevelScore').textContent = nextLevelScore - score;
+            updateScoreBarColor();
+        }
+
         function updateLevel() {
             const prevLevel = level;
             level = Math.floor(score / 100) + 1;
@@ -418,8 +541,9 @@
                 levelDisplay.textContent = level;
                 enemySpeed += 0.3;
                 enemySpawnInterval = Math.max(500, enemySpawnIntervalBase - (level -1) * 200);
-                showMessage(`レベルアップ！`, `レベル ${level} になりました！敵が強化されます。`, "了解！");
+                showMessage(`レベルアップ！`, `レベル ${level} になりました！敵が強化されます。`, "了解！", true);
             }
+            updateScoreBar();
         }
 
         function gameOver(reason) {
@@ -513,6 +637,7 @@
 
         window.addEventListener('load', () => {
             handleResize(); // 初期ロード時にも呼び出してサイズ設定
+            updateScoreBar(); // 初期スコアバーの表示
             initialDraw();
         });
         
@@ -544,19 +669,3 @@
     </script>
 </body>
 </html>
-```
-
-変更点：
-
-1.  **CSS (`body` スタイル):**
-    * `align-items: center;` をコメントアウトし、`align-items: flex-start;` に変更しました。これにより、ゲームコンテナはビューポートの上端から配置されるようになります。
-    * `padding-top: 20px;` と `padding-bottom: 20px;` を追加し、上下に少し余白を設けました。
-    * `box-sizing: border-box;` を追加し、paddingが `height: 100vh;` の計算に含まれるようにしました。
-
-2.  **JavaScript (`canvasHeight` の計算調整):**
-    * `handleResize` 関数内および初期の `canvasHeight` 設定で、`body` に追加した `padding-top` と `padding-bottom` の合計 `40px` を `window.innerHeight` から引いた上で、キャンバスの高さを計算するようにしました (`(window.innerHeight - 40) * 0.60;`)。これにより、キャンバスがpadding領域にはみ出すのを防ぎます。また、割合を少し調整し、最低限の高さを確保するロジックも追加しています。
-
-3.  **JavaScript (`playerY` の扱いに関する注釈):**
-    * `playerY` は現在 `const` で定義されており、初期の `canvas.height` に基づいて一度だけ計算されます。画面リサイズで `canvas.height` が変わっても `playerY` は更新されません。もしプレイヤーを常に画面下部に固定したい場合は、`playerY` を `let` に変更し、`handleResize` 関数内や `draw` 関数内で `canvas.height` に基づいて再計算する必要があります。今回の修正では `playerY` のロジックは直接変更していませんが、もしプレイヤーの位置が意図通りでなければ、この点の見直しが必要になるかもしれません。現状では、プレイヤーは新しいキャンバスの底辺からの相対位置で描画されます。
-
-これで、スコア表示が適切に画面内に表示されるようになるはずです。ご確認くだ
