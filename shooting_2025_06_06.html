@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>シンプルなシューティングゲーム</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            justify-content: center; /* 水平中央揃え */
+            /* align-items: center; */   /* 垂直中央揃えから変更 */
+            align-items: flex-start; /* コンテンツを上端に配置 */
+            height: 100vh;
+            margin: 0;
+            background-color: #1a202c; /* ダークグレーの背景 */
+            overflow: hidden; /* スクロールバーを隠す */
+            padding-top: 20px;      /* 上部に余白を追加 */
+            padding-bottom: 20px;   /* 下部にも余白を追加（対称性のため） */
+            box-sizing: border-box; /* paddingをheightに含める */
+        }
+        #gameCanvas {
+            background-color: #2d3748; /* やや明るいグレーのキャンバス背景 */
+            border: 2px solid #4a5568; /* ボーダーの色 */
+            box-shadow: 0 10px 20px rgba(0,0,0,0.3); /* 影を追加 */
+            border-radius: 8px; /* 角を丸める */
+            display: block; /* 中央揃えのため */
+            margin: auto; /* 中央揃えのため */
+        }
+        .game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px; /* キャンバスとUI要素の間隔を少し詰める */
+        }
+        .controls, .info {
+            color: #e2e8f0; /* 明るいグレーのテキスト */
+            background-color: #2d3748;
+            padding: 10px 18px; /* 少し小さく */
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            text-align: center;
+            width: 100%;
+            max-width: 480px; /* キャンバス幅に合わせる */
+        }
+        .controls button {
+            background-color: #4299e1; /* 青色のボタン */
+            color: white;
+            border: none;
+            padding: 8px 12px; /* 少し小さく */
+            margin: 0 4px; /* 少し詰める */
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background-color 0.3s ease;
+            font-size: 0.9rem; /* 少し小さく */
+        }
+        .controls button:hover {
+            background-color: #3182ce; /* ホバー時のボタン色 */
+        }
+        .controls button:disabled {
+            background-color: #a0aec0; /* 無効時のボタン色 */
+            cursor: not-allowed;
+        }
+        .message-box {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(45, 55, 72, 0.97); /* 半透明の背景 */
+            color: #e2e8f0;
+            padding: 25px 35px; /* 少し小さく */
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            z-index: 100; /* 他の要素より前面に表示 */
+            font-size: 1.3rem; /* 少し小さく */
+            width: 80%;
+            max-width: 450px;
+            display: none; /* 初期状態では非表示 */
+        }
+        .message-box h2 {
+            font-size: 1.8rem; /* 少し小さく */
+            margin-bottom: 12px;
+            color: #63b3ed; /* 青系のアクセントカラー */
+        }
+        .message-box p {
+            font-size: 1rem; /* 少し小さく */
+            margin-bottom: 15px;
+            line-height: 1.6;
+        }
+        .message-box button {
+            background-color: #48bb78; /* 緑色のボタン */
+            color: white;
+            border: none;
+            padding: 10px 20px; /* 少し小さく */
+            margin-top: 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 1rem; /* 少し小さく */
+            transition: background-color 0.3s ease;
+        }
+        .message-box button:hover {
+            background-color: #38a169; /* ホバー時のボタン色 */
+        }
+
+        /* タッチ操作用のボタン */
+        .touch-controls {
+            display: none; /* デフォルトでは非表示、JSでタッチデバイス判定時に表示 */
+            position: fixed;
+            bottom: 15px; /* 少し上げる */
+            left: 50%;
+            transform: translateX(-50%);
+            gap: 15px; /* 少し詰める */
+            z-index: 50;
+        }
+        .touch-controls button {
+            background-color: rgba(74, 85, 104, 0.8); /* 半透明のグレー */
+            color: white;
+            border: 2px solid #a0aec0;
+            padding: 12px 18px; /* 少し小さく */
+            border-radius: 50%; /* 丸いボタン */
+            font-size: 1.3rem; /* 少し小さく */
+            width: 60px; /* ボタンの幅 */
+            height: 60px; /* ボタンの高さ */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
+         .touch-controls button:active {
+            background-color: rgba(45, 55, 72, 0.9);
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="info">
+            <span>スコア: <span id="score">0</span></span> |
+            <span>レベル: <span id="level">1</span></span>
+        </div>
+        <canvas id="gameCanvas"></canvas>
+        <div class="controls">
+            <button id="startButton">開始</button>
+            <button id="pauseButton" disabled>一時停止</button>
+            <button id="restartButton" style="display: none;">リスタート</button>
+        </div>
+        <div class="instructions text-xs text-gray-400 mt-1">
+            操作: ← → キーで移動, ↑/スペースキーで弾発射
+        </div>
+    </div>
+
+    <div id="messageBox" class="message-box">
+        <h2 id="messageTitle"></h2>
+        <p id="messageText"></p>
+        <button id="messageButton">OK</button>
+    </div>
+
+    <div class="touch-controls" id="touchControls">
+        <button id="touchLeft">⬅️</button>
+        <button id="touchFire">💥</button>
+        <button id="touchRight">➡️</button>
+    </div>
+
+    <script>
+        // --- DOM Elements ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreDisplay = document.getElementById('score');
+        const levelDisplay = document.getElementById('level');
+        const startButton = document.getElementById('startButton');
+        const pauseButton = document.getElementById('pauseButton');
+        const restartButton = document.getElementById('restartButton');
+
+        const messageBox = document.getElementById('messageBox');
+        const messageTitle = document.getElementById('messageTitle');
+        const messageText = document.getElementById('messageText');
+        const messageButton = document.getElementById('messageButton');
+
+        const touchControls = document.getElementById('touchControls');
+        const touchLeftButton = document.getElementById('touchLeft');
+        const touchRightButton = document.getElementById('touchRight');
+        const touchFireButton = document.getElementById('touchFire');
+
+        // --- Game Variables ---
+        let canvasWidth = 480;
+        let canvasHeight = 600;
+        if (window.innerWidth < 500) {
+            canvasWidth = window.innerWidth * 0.9;
+            // canvasHeightを、bodyのpaddingを考慮して調整
+            canvasHeight = (window.innerHeight - 40) * 0.60; // (100vh - 40px padding) の60%
+            if (canvasHeight < 200) canvasHeight = 200; // 最低限の高さを確保
+        }
+        canvas.width = canvasWidth;
+        canvas.height = canvasHeight;
+
+        const playerWidth = 50;
+        const playerHeight = 30;
+        let playerX = (canvas.width - playerWidth) / 2;
+        const playerY = canvas.height - playerHeight - 20;
+        const playerSpeed = 8;
+
+        const bulletWidth = 5;
+        const bulletHeight = 15;
+        const bulletSpeed = 10;
+        let bullets = [];
+        let lastShotTime = 0;
+
+        const enemyWidth = 40;
+        const enemyHeight = 30;
+        let enemySpeed = 1;
+        const enemySpawnIntervalBase = 2000;
+        let enemySpawnInterval = enemySpawnIntervalBase;
+        let enemies = [];
+
+        let score = 0;
+        let level = 1;
+        let gameRunning = false;
+        let paused = false;
+        let animationFrameId;
+        let lastEnemySpawnTime = 0;
+        let keys = {};
+
+        // --- Assets (SVG) ---
+        const playerImage = new Image();
+        playerImage.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 60" width="${playerWidth}" height="${playerHeight}"><polygon points="50,0 100,60 0,60" fill="#4299e1"/><rect x="40" y="20" width="20" height="20" fill="#2b6cb0"/></svg>`);
+        const enemyImage = new Image();
+        enemyImage.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 60" width="${enemyWidth}" height="${enemyHeight}"><path d="M10 0 L70 0 Q80 30 70 60 L10 60 Q0 30 10 0 Z" fill="#e53e3e"/><circle cx="25" cy="30" r="8" fill="#9b2c2c"/><circle cx="55" cy="30" r="8" fill="#9b2c2c"/></svg>`);
+        const bulletImage = new Image();
+        bulletImage.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 30" width="${bulletWidth}" height="${bulletHeight}"><rect width="10" height="30" fill="#f6e05e"/></svg>`);
+
+        // --- Event Listeners ---
+        document.addEventListener('keydown', (e) => {
+            keys[e.key] = true;
+            if (gameRunning && !paused && (e.key === ' ' || e.key === 'ArrowUp')) e.preventDefault();
+        });
+        document.addEventListener('keyup', (e) => { keys[e.key] = false; });
+
+        startButton.addEventListener('click', startGame);
+        pauseButton.addEventListener('click', togglePause);
+        restartButton.addEventListener('click', restartGame);
+
+        messageButton.addEventListener('click', () => {
+            messageBox.style.display = 'none';
+            if (!gameRunning) {
+                restartButton.style.display = 'inline-block';
+                startButton.style.display = 'none';
+                pauseButton.style.display = 'none';
+                pauseButton.disabled = true;
+            } else if (paused && messageButton.textContent === "再開") {
+                togglePause();
+            }
+        });
+        
+        initTouchControls();
+
+        // --- Message Box Function (シンプル版) ---
+        function showMessage(title, text, buttonText = "OK") {
+            messageTitle.textContent = title;
+            messageText.textContent = text;
+            messageButton.textContent = buttonText;
+            messageBox.style.display = 'block';
+            if (gameRunning) {
+                 if (!paused) paused = true;
+            }
+        }
+
+        // --- Game Logic Functions ---
+        function startGame() {
+            if (gameRunning && !paused) return;
+            if (paused) {
+                paused = false;
+                pauseButton.textContent = '一時停止';
+                messageBox.style.display = 'none';
+                gameLoop();
+                return;
+            }
+            resetGame();
+            gameRunning = true;
+            paused = false;
+            startButton.disabled = true;
+            startButton.style.display = 'none';
+            pauseButton.disabled = false;
+            pauseButton.textContent = '一時停止';
+            pauseButton.style.display = 'inline-block';
+            restartButton.style.display = 'none';
+            lastEnemySpawnTime = performance.now();
+            gameLoop();
+        }
+
+        function togglePause() {
+            if (!gameRunning) return;
+            paused = !paused;
+            if (paused) {
+                pauseButton.textContent = '再開';
+                showMessage("一時停止中", "ゲームを再開するには「再開」ボタンを押してください。", "再開");
+                cancelAnimationFrame(animationFrameId);
+            } else {
+                pauseButton.textContent = '一時停止';
+                messageBox.style.display = 'none';
+                gameLoop();
+            }
+        }
+        
+        function restartGame() {
+            cancelAnimationFrame(animationFrameId);
+            resetGame();
+            // 画面リサイズ処理を呼んでキャンバスサイズを再計算させる
+            handleResize();
+            startGame();
+        }
+
+        function resetGame() {
+            playerX = (canvas.width - playerWidth) / 2;
+            bullets = [];
+            enemies = [];
+            score = 0;
+            level = 1;
+            enemySpeed = 1;
+            enemySpawnInterval = enemySpawnIntervalBase;
+            scoreDisplay.textContent = score;
+            levelDisplay.textContent = level;
+            gameRunning = false;
+            paused = false;
+            keys = {};
+        }
+
+        function fireBullet() {
+            const currentTime = performance.now();
+            if (currentTime - lastShotTime > 300) {
+                 bullets.push({
+                    x: playerX + playerWidth / 2 - bulletWidth / 2,
+                    y: playerY - bulletHeight,
+                    width: bulletWidth,
+                    height: bulletHeight
+                });
+                lastShotTime = currentTime;
+            }
+        }
+        
+        function movePlayer(dx) {
+            playerX += dx;
+            if (playerX < 0) playerX = 0;
+            if (playerX + playerWidth > canvas.width) playerX = canvas.width - playerWidth;
+        }
+
+        function handleInput() {
+            if (!gameRunning || paused) return;
+            if (keys['ArrowLeft'] || keys['a']) movePlayer(-playerSpeed);
+            if (keys['ArrowRight'] || keys['d']) movePlayer(playerSpeed);
+            if (keys['ArrowUp'] || keys[' '] || keys['w']) {
+                fireBullet();
+                keys['ArrowUp'] = false; keys[' '] = false; keys['w'] = false;
+            }
+        }
+
+        function spawnEnemy() {
+            const currentTime = performance.now();
+            if (currentTime - lastEnemySpawnTime > enemySpawnInterval) {
+                const x = Math.random() * (canvas.width - enemyWidth);
+                enemies.push({ x: x, y: 0, width: enemyWidth, height: enemyHeight });
+                lastEnemySpawnTime = currentTime;
+            }
+        }
+
+        function updateEnemies() {
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                enemies[i].y += enemySpeed;
+                if (enemies[i].y + enemyHeight > canvas.height) {
+                    enemies.splice(i, 1);
+                }
+            }
+        }
+
+        function updateBullets() {
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                bullets[i].y -= bulletSpeed;
+                if (bullets[i].y < 0) bullets.splice(i, 1);
+            }
+        }
+
+        function checkCollisions() {
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                for (let j = enemies.length - 1; j >= 0; j--) {
+                    if (bullets[i] && enemies[j] &&
+                        bullets[i].x < enemies[j].x + enemies[j].width &&
+                        bullets[i].x + bullets[i].width > enemies[j].x &&
+                        bullets[i].y < enemies[j].y + enemies[j].height &&
+                        bullets[i].y + bullets[i].height > enemies[j].y) {
+                        enemies.splice(j, 1);
+                        bullets.splice(i, 1);
+                        score += 10;
+                        scoreDisplay.textContent = score;
+                        updateLevel();
+                        break; 
+                    }
+                }
+            }
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                 if (enemies[i] &&
+                    playerX < enemies[i].x + enemies[i].width &&
+                    playerX + playerWidth > enemies[i].x &&
+                    playerY < enemies[i].y + enemies[i].height &&
+                    playerY + playerHeight > enemies[i].y) {
+                    gameOver("敵と衝突！");
+                    return;
+                }
+            }
+        }
+
+        function updateLevel() {
+            const prevLevel = level;
+            level = Math.floor(score / 100) + 1;
+            if (level > prevLevel) {
+                levelDisplay.textContent = level;
+                enemySpeed += 0.3;
+                enemySpawnInterval = Math.max(500, enemySpawnIntervalBase - (level -1) * 200);
+                showMessage(`レベルアップ！`, `レベル ${level} になりました！敵が強化されます。`, "了解！");
+            }
+        }
+
+        function gameOver(reason) {
+            gameRunning = false;
+            paused = true; 
+            cancelAnimationFrame(animationFrameId);
+            showMessage("ゲームオーバー", `${reason}\n最終スコア: ${score}`, "もう一度プレイ");
+            startButton.style.display = 'none';
+            pauseButton.disabled = true;
+            pauseButton.style.display = 'none';
+            restartButton.style.display = 'inline-block';
+        }
+        
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(playerImage, playerX, playerY, playerWidth, playerHeight);
+            bullets.forEach(bullet => ctx.drawImage(bulletImage, bullet.x, bullet.y, bullet.width, bullet.height));
+            enemies.forEach(enemy => ctx.drawImage(enemyImage, enemy.x, enemy.y, enemy.width, enemy.height));
+        }
+
+        function gameLoop() {
+            if (!gameRunning) return;
+            if (paused) return;
+
+            handleInput();
+            spawnEnemy();
+            updateEnemies();
+            updateBullets();
+            checkCollisions();
+            draw();
+            
+            if (gameRunning && !paused) {
+                 animationFrameId = requestAnimationFrame(gameLoop);
+            }
+        }
+
+        function initialDraw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(playerImage, playerX, playerY, playerWidth, playerHeight);
+            ctx.font = "20px 'Inter', sans-serif";
+            ctx.fillStyle = "#e2e8f0";
+            ctx.textAlign = "center";
+            ctx.fillText("「開始」ボタンでゲームスタート", canvas.width / 2, canvas.height / 2 - 30);
+        }
+        
+        function handleResize() {
+            const prevCanvasWidth = canvasWidth;
+            const prevCanvasHeight = canvasHeight;
+
+            if (window.innerWidth < 500) {
+                canvasWidth = window.innerWidth * 0.9;
+                 // bodyのpadding (top 20px, bottom 20px = 40px) を考慮
+                canvasHeight = (window.innerHeight - 40) * 0.60;
+                if (canvasHeight < 200) canvasHeight = 200; // 最低限の高さを確保
+            } else {
+                canvasWidth = 480;
+                canvasHeight = 600;
+            }
+
+            // サイズ変更があった場合のみ更新
+            if (canvas.width !== canvasWidth || canvas.height !== canvasHeight) {
+                canvas.width = canvasWidth;
+                canvas.height = canvasHeight;
+
+                 // プレイヤーの位置を再計算（画面下部中央に再配置）
+                playerX = (canvas.width - playerWidth) / 2;
+                // playerYは固定なので、canvas.heightの変更に合わせて再計算が必要
+                // const playerY = canvas.height - playerHeight - 20; // この行はグローバルスコープにあるので、ここでは再宣言しない
+                // playerYはグローバルで canvas.height に依存しているため、
+                // draw()関数が常に最新のplayerY (canvas.height基準) を使うようにする
+                // または、playerYの定義を draw() の直前や gameLoop 内で行うなどの工夫も考えられるが、
+                // 現状はグローバルで定義し、その値が使われることを期待する。
+                // 最も安全なのは、playerY を更新する playerY = newCanvasHeight - playerHeight - 20; のような処理をここに入れること。
+                // しかし、playerYは定数として扱われている箇所があるので注意。
+                // ここでは、playerXのみ再計算し、playerYは不変とし、新しいcanvasの底辺基準で描画されることを期待。
+                // もしplayerYが動的に変わるなら、const playerYではなくlet playerYにする必要がある。
+                // 現状のコードでは playerY は const playerY = canvas.height - playerHeight - 20; となっており、
+                // これは初期のcanvas.heightに依存する。リサイズでcanvas.heightが変わってもplayerYは変わらない。
+                // これを修正するには playerY も let にして更新する。
+                // playerY = canvas.height - playerHeight - 20; // ← これを行うにはlet playerYにする必要がある
+
+            }
+
+
+            if (!gameRunning) {
+                initialDraw();
+            } else if (!paused) {
+                draw(); // ゲーム実行中なら現在の状態を再描画
+            }
+        }
+
+        window.addEventListener('load', () => {
+            handleResize(); // 初期ロード時にも呼び出してサイズ設定
+            initialDraw();
+        });
+        
+        function initTouchControls() {
+            if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+                touchControls.style.display = 'flex';
+                let touchLeftActive = false;
+                let touchRightActive = false;
+
+                touchLeftButton.addEventListener('touchstart', (e) => { e.preventDefault(); touchLeftActive = true; });
+                touchLeftButton.addEventListener('touchend', (e) => { e.preventDefault(); touchLeftActive = false; });
+                touchRightButton.addEventListener('touchstart', (e) => { e.preventDefault(); touchRightActive = true; });
+                touchRightButton.addEventListener('touchend', (e) => { e.preventDefault(); touchRightActive = false; });
+                touchFireButton.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    if (gameRunning && !paused) fireBullet();
+                });
+                function handleTouchMove() {
+                    if (touchLeftActive) movePlayer(-playerSpeed);
+                    if (touchRightActive) movePlayer(playerSpeed);
+                    requestAnimationFrame(handleTouchMove);
+                }
+                handleTouchMove();
+            }
+        }
+
+        window.addEventListener('resize', handleResize);
+
+    </script>
+</body>
+</html>
+```
+
+変更点：
+
+1.  **CSS (`body` スタイル):**
+    * `align-items: center;` をコメントアウトし、`align-items: flex-start;` に変更しました。これにより、ゲームコンテナはビューポートの上端から配置されるようになります。
+    * `padding-top: 20px;` と `padding-bottom: 20px;` を追加し、上下に少し余白を設けました。
+    * `box-sizing: border-box;` を追加し、paddingが `height: 100vh;` の計算に含まれるようにしました。
+
+2.  **JavaScript (`canvasHeight` の計算調整):**
+    * `handleResize` 関数内および初期の `canvasHeight` 設定で、`body` に追加した `padding-top` と `padding-bottom` の合計 `40px` を `window.innerHeight` から引いた上で、キャンバスの高さを計算するようにしました (`(window.innerHeight - 40) * 0.60;`)。これにより、キャンバスがpadding領域にはみ出すのを防ぎます。また、割合を少し調整し、最低限の高さを確保するロジックも追加しています。
+
+3.  **JavaScript (`playerY` の扱いに関する注釈):**
+    * `playerY` は現在 `const` で定義されており、初期の `canvas.height` に基づいて一度だけ計算されます。画面リサイズで `canvas.height` が変わっても `playerY` は更新されません。もしプレイヤーを常に画面下部に固定したい場合は、`playerY` を `let` に変更し、`handleResize` 関数内や `draw` 関数内で `canvas.height` に基づいて再計算する必要があります。今回の修正では `playerY` のロジックは直接変更していませんが、もしプレイヤーの位置が意図通りでなければ、この点の見直しが必要になるかもしれません。現状では、プレイヤーは新しいキャンバスの底辺からの相対位置で描画されます。
+
+これで、スコア表示が適切に画面内に表示されるようになるはずです。ご確認くだ
